@@ -3,7 +3,10 @@ import {
   collectNearbyCoins,
   createInitialBallState,
   createInitialPlayerState,
+  deductCoins,
+  getObstacleCollisionDirection,
   hasScored,
+  startPlayerFall,
   stepBall,
   stepPlayer,
 } from '../src/domain/gameRules';
@@ -88,6 +91,80 @@ describe('player movement rules', () => {
     const coolingDown = { ...createInitialPlayerState(), kickCooldown: 0.03 };
     const next = stepPlayer(coolingDown, idleInput, 0.05);
     expect(next.kickCooldown).toBe(0);
+  });
+});
+
+describe('obstacle fall and coin penalty rules', () => {
+  it('should_start_a_timed_fall_and_stop_horizontal_movement_when_obstacle_collision_occurs', () => {
+    const moving = { ...createInitialPlayerState(), x: 4, vx: 7.2, slideRemaining: 0.2 };
+    const fallen = startPlayerFall(moving);
+
+    expect(fallen.x).toBe(4);
+    expect(fallen.vx).toBe(0);
+    expect(fallen.vy).toBe(0);
+    expect(fallen.grounded).toBe(true);
+    expect(fallen.slideRemaining).toBe(0);
+    expect(fallen.fallRemaining).toBeGreaterThan(0);
+  });
+
+  it('should_ignore_movement_inputs_until_fall_recovery_finishes', () => {
+    const fallen = { ...startPlayerFall(createInitialPlayerState()), fallRemaining: 0.2 };
+    const next = stepPlayer(fallen, { ...idleInput, right: true, jumpPressed: true, slidePressed: true }, 0.05);
+
+    expect(next.x).toBe(fallen.x);
+    expect(next.y).toBe(0);
+    expect(next.vx).toBe(0);
+    expect(next.fallRemaining).toBeCloseTo(0.15);
+  });
+
+  it('should_deduct_three_coins_when_balance_is_sufficient', () => {
+    expect(deductCoins(7)).toBe(4);
+  });
+
+  it('should_clamp_coin_balance_to_zero_when_penalty_exceeds_balance', () => {
+    expect(deductCoins(2)).toBe(0);
+    expect(deductCoins(0)).toBe(0);
+  });
+
+  it('should_not_return_a_negative_balance_for_invalid_negative_input', () => {
+    expect(deductCoins(-5)).toBe(0);
+  });
+
+  it('should_treat_non_finite_coin_values_as_safe_balances', () => {
+    expect(deductCoins(Number.NaN)).toBe(0);
+    expect(deductCoins(5, Number.NaN)).toBe(5);
+  });
+
+  it('should_resume_movement_after_fall_recovery_timer_expires', () => {
+    const fallen = { ...startPlayerFall(createInitialPlayerState()), fallRemaining: 0.01 };
+    const recoveryFrame = stepPlayer(fallen, { ...idleInput, right: true }, 0.05);
+    const nextFrame = stepPlayer(recoveryFrame, { ...idleInput, right: true }, 0.05);
+
+    expect(recoveryFrame.x).toBe(fallen.x);
+    expect(recoveryFrame.fallRemaining).toBe(0);
+    expect(nextFrame.x).toBeGreaterThan(recoveryFrame.x);
+  });
+
+  it('should_detect_an_unsafe_crossing_from_the_left', () => {
+    const player = { ...createInitialPlayerState(), x: 7.5 };
+    expect(getObstacleCollisionDirection(7.3, player, 8.4)).toBe(1);
+  });
+
+  it('should_detect_an_unsafe_crossing_from_the_right', () => {
+    const player = { ...createInitialPlayerState(), x: 9.3 };
+    expect(getObstacleCollisionDirection(9.6, player, 8.4)).toBe(-1);
+  });
+
+  it('should_allow_a_player_to_pass_an_obstacle_when_sliding_or_high_in_the_air', () => {
+    const crossing = { ...createInitialPlayerState(), x: 7.5 };
+    expect(getObstacleCollisionDirection(7.3, { ...crossing, slideRemaining: 0.3 }, 8.4)).toBeNull();
+    expect(getObstacleCollisionDirection(7.3, { ...crossing, y: 1.3 }, 8.4)).toBeNull();
+    expect(getObstacleCollisionDirection(7.3, { ...crossing, fallRemaining: 0.3 }, 8.4)).toBeNull();
+  });
+
+  it('should_not_report_a_collision_without_crossing_the_obstacle_edge', () => {
+    const player = { ...createInitialPlayerState(), x: 7.4 };
+    expect(getObstacleCollisionDirection(7.3, player, 8.4)).toBeNull();
   });
 });
 

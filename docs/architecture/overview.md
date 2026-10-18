@@ -1,10 +1,10 @@
 # Architecture Overview
 
 Date: 2026-10-19
-Status: MVP baseline
+Status: Phase 1 — obstacle penalty and anime urban art direction
 
 ## Context
-This is a browser-only game. Server-side concepts such as Controllers, UseCases, Repositories, tracing, idempotency keys, and secret stores would add no value because the game makes no network requests and stores no user data. Gameplay inspiration: [Kick — Official Release Date Trailer](https://youtu.be/QQn899tA2vo); all meshes and implementation are original.
+This is a browser-only game. Server-side concepts such as Controllers, UseCases, Repositories, tracing, idempotency keys, and secret stores would add no value because the game makes no network requests and stores no user data. Visual direction is informed by the reference game's anime 2.5D side-scrolling presentation, urban streets, collectable coins, and obstacle avoidance; all game assets and code in this repository remain original.
 
 ## Component Graph
 
@@ -12,11 +12,17 @@ This is a browser-only game. Server-side concepts such as Controllers, UseCases,
 flowchart TD
   Keys[Keyboard / Touch] --> Controller[Game Controller]
   Controller --> Rules[Pure Domain Rules]
-  Rules --> State[Player / Ball / Coin State]
-  State --> Controller
-  Controller --> Scene[Three.js SceneFactory]
+  Rules --> Player[Player State: movement / fall recovery]
+  Rules --> Wallet[Coin Balance / Penalty]
+  Rules --> Ball[Ball State]
+  Player --> Controller
+  Wallet --> Controller
+  Ball --> Controller
+  Controller --> Collision[Obstacle Crossing Adapter]
+  Collision --> Rules
+  Controller --> Scene[Three.js 2.5D City Scene]
   Scene --> Renderer[WebGL Renderer]
-  Controller --> HUD[DOM HUD / Cards]
+  Controller --> HUD[HUD / Fall Feedback]
   Tests[Vitest Domain Tests] --> Rules
 ```
 
@@ -24,8 +30,10 @@ flowchart TD
 
 1. `Game` reads held and just-pressed input each animation frame.
 2. `stepPlayer` and `stepBall` integrate deterministic state using delta time clamped to 50 ms.
-3. Collision integration handles low obstacles; collection and goal checks update objective state.
-4. The view layer maps domain state to the character group, ball group, coin groups, camera, and HUD.
+3. The collision adapter detects an obstacle crossing unless the player is sliding beneath or jumping above it. A collision starts a timed fall state and applies one coin penalty.
+4. While `fallRemaining > 0`, player input is ignored and the player remains grounded; the view animates a stumble/tilt. Recovery allows control again.
+5. `coinBalance` is the spendable HUD balance. Collecting a coin increases it by one; hitting an obstacle subtracts up to three coins, clamped at zero. Collectable-world state remains separate so collected coins do not reappear until restart.
+6. The view layer maps player, coin, ball, obstacle and goal state to original Three.js meshes, camera, lighting, and HUD.
 
 ## Dependencies
 
@@ -42,9 +50,15 @@ tests/gameRules.test.ts --> src/domain/gameRules.ts
 
 ## Architectural boundaries
 - `domain` must remain independent of Three.js and browser APIs.
-- `SceneFactory` owns procedural 3D asset creation, not game rules.
-- `Game` is the adapter that translates inputs and domain state into render objects.
+- `SceneFactory` owns procedural 2.5D urban art assets, not game rules.
+- `Game` is the adapter that translates inputs, obstacle crossings and domain state into render objects.
 - `main` wires HTML elements and handles startup failure.
 
-## Non-goals for the MVP
+## Art direction
+- Side-on orthographic camera with layered Japanese-inspired street buildings, storefront signs, utility poles, trees, tiled sidewalk, road paint and a crosswalk.
+- Anime-proportioned student with dark swept hair, school clothes, visible backpack and oversized sneakers.
+- Saturated but controlled colors, clear silhouettes, warm directional light, high-contrast obstacle markings, and readable gold tokens.
+- Do not use original game screenshots, logos, characters, textures or extracted assets.
+
+## Non-goals
 No backend, user accounts, database, online leaderboard, API, analytics, environment secrets, or external model download. These can be reconsidered only if product requirements change.

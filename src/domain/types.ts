@@ -8,6 +8,7 @@ export interface PlayerState {
   facing: Direction;
   grounded: boolean;
   slideRemaining: number;
+  fallRemaining: number;
   kickCooldown: number;
   animationTime: number;
 }

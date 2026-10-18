@@ -3,7 +3,12 @@ import {
   collectNearbyCoins,
   createInitialBallState,
   createInitialPlayerState,
+  deductCoins,
+  FALL_RECOVERY_SECONDS,
+  getObstacleCollisionDirection,
   hasScored,
+  OBSTACLE_COIN_PENALTY,
+  startPlayerFall,
   stepBall,
   stepPlayer,
 } from '../domain/gameRules';
@@ -37,6 +42,7 @@ export class Game {
   private started = false;
   private completed = false;
   private kickCount = 0;
+  private coinBalance = 0;
   private previousTime = 0;
   private kickPoseRemaining = 0;
   private hintTimer = 0;
@@ -82,12 +88,18 @@ export class Game {
     this.ball = createInitialBallState();
     this.coins = this.world.coins.map((coin) => ({ ...coin, collected: false }));
     this.kickCount = 0;
+    this.coinBalance = 0;
     this.started = true;
     this.completed = false;
     this.kickPoseRemaining = 0;
     this.ui.coinCount.textContent = '0';
+    this.ui.coinCount.classList.remove('coin-loss');
     this.ui.kickCount.textContent = '0';
     this.ui.goalStatus.textContent = '0 / 1';
+    this.world.coinLossTokens.forEach((token) => {
+      token.visible = false;
+      token.scale.setScalar(1);
+    });
     this.ui.finishCard.classList.add('hidden');
     this.ui.introCard.classList.add('hidden');
     this.ui.bottomHint.textContent = DEFAULT_HINT;
@@ -131,15 +143,17 @@ export class Game {
     if (this.justPressed.has('Space')) this.tryKick();
     this.justPressed.clear();
 
-    const collected = collectNearbyCoins(this.player.x, this.player.y, this.coins);
-    this.coins = collected.coins;
-    if (collected.collectedCount > 0) {
-      const total = this.coins.filter((coin) => coin.collected).length;
-      this.ui.coinCount.textContent = String(total);
-      this.coins.forEach((coin, index) => {
-        if (coin.collected && this.world.coinMeshes[index]) this.world.coinMeshes[index]!.visible = false;
-      });
-      this.flashHint(`好眼力！收集了 ${total} 枚金幣`);
+    if (this.player.fallRemaining <= 0) {
+      const collected = collectNearbyCoins(this.player.x, this.player.y, this.coins);
+      this.coins = collected.coins;
+      if (collected.collectedCount > 0) {
+        this.coinBalance += collected.collectedCount;
+        this.ui.coinCount.textContent = String(this.coinBalance);
+        this.coins.forEach((coin, index) => {
+          if (coin.collected && this.world.coinMeshes[index]) this.world.coinMeshes[index]!.visible = false;
+        });
+        this.flashHint(`好眼力！目前有 ${this.coinBalance} 枚金幣`);
+      }
     }
 
     this.kickPoseRemaining = Math.max(0, this.kickPoseRemaining - deltaSeconds);
@@ -163,7 +177,7 @@ export class Game {
   }
 
   private tryKick(): void {
-    if (this.player.kickCooldown > 0) return;
+    if (this.player.fallRemaining > 0 || this.player.kickCooldown > 0) return;
     const directionToBall = (this.ball.x - this.player.x) * this.player.facing;
     const nearEnough = directionToBall >= -0.35 && directionToBall <= 1.9;
     const heightOkay = this.ball.y < 1.55 && this.player.y < 1.15;
@@ -187,19 +201,49 @@ export class Game {
   }
 
   private applyObstacleCollisions(previousX: number): void {
-    for (const obstacleX of this.obstacles) {
-      const crossedObstacle = Math.abs(this.player.x - obstacleX) < 0.94;
-      const canPassUnder = this.player.slideRemaining > 0;
-      const canJumpOver = this.player.y > 1.18;
-      if (!crossedObstacle || canPassUnder || canJumpOver) continue;
+    if (this.player.fallRemaining > 0) return;
 
-      if (previousX < obstacleX - 0.94 && this.player.x > obstacleX - 0.94) {
-        this.player = { ...this.player, x: obstacleX - 0.94, vx: 0 };
-        this.flashHint('路障擋住了！按 ↓ 滑鏟，或按 ↑ 跳過');
-      } else if (previousX > obstacleX + 0.94 && this.player.x < obstacleX + 0.94) {
-        this.player = { ...this.player, x: obstacleX + 0.94, vx: 0 };
-        this.flashHint('路障擋住了！按 ↓ 滑鏟，或按 ↑ 跳過');
+    for (const obstacleX of this.obstacles) {
+      const collisionDirection = getObstacleCollisionDirection(previousX, this.player, obstacleX);
+      if (collisionDirection === null) continue;
+
+      const safeX = obstacleX + (collisionDirection === 1 ? -1.0 : 1.0);
+      this.player = startPlayerFall({ ...this.player, x: safeX });
+
+      const previousBalance = this.coinBalance;
+      this.coinBalance = deductCoins(this.coinBalance, OBSTACLE_COIN_PENALTY);
+      const lostCoins = previousBalance - this.coinBalance;
+      this.ui.coinCount.textContent = String(this.coinBalance);
+      this.kickPoseRemaining = 0;
+      this.animateCoinLoss(lostCoins);
+
+      if (lostCoins > 0) {
+        this.ui.coinCount.classList.remove('coin-loss');
+        window.requestAnimationFrame(() => this.ui.coinCount.classList.add('coin-loss'));
+        this.flashHint(`哎呀！撞上路障，跌倒並掉落 ${lostCoins} 枚金幣`);
+      } else {
+        this.flashHint('哎呀！撞上路障，跌倒了！按 ↑ 跳躍或 ↓ 滑鏟避開');
       }
+      return;
+    }
+  }
+
+  private animateCoinLoss(lostCoins: number): void {
+    const tokens = this.world.coinLossTokens;
+    const count = Math.min(tokens.length, lostCoins);
+    for (let index = 0; index < count; index += 1) {
+      const token = tokens[index];
+      if (!token) continue;
+      token.visible = true;
+      token.scale.setScalar(1);
+      token.position.set(
+        this.player.x + (index - (count - 1) / 2) * 0.22,
+        this.player.y + 1.78,
+        0.64,
+      );
+      token.userData['life'] = 0.78;
+      token.userData['velocityX'] = (index - (count - 1) / 2) * 1.8;
+      token.userData['velocityY'] = 3.2 + index * 0.25;
     }
   }
 
@@ -211,13 +255,24 @@ export class Game {
       ? Math.sin(this.player.animationTime * 12.5) * 0.52
       : 0;
 
-    character.root.position.set(this.player.x, this.player.y, 0.12);
-    character.root.scale.set(this.player.facing, isSliding ? 0.36 : 1, 1);
-    character.leftLeg.rotation.z = gait;
-    character.rightLeg.rotation.z = -gait;
-    character.leftArm.rotation.z = -gait * 0.8;
-    character.rightArm.rotation.z = gait * 0.8;
-    character.torso.rotation.z = isSliding ? -0.32 : (isMoving ? Math.sin(this.player.animationTime * 12.5) * 0.035 : 0);
+    const isFallen = this.player.fallRemaining > 0;
+    const elapsedFall = FALL_RECOVERY_SECONDS - this.player.fallRemaining;
+    let fallTilt = 0;
+    if (isFallen) {
+      const down = Math.min(1, Math.max(0, elapsedFall / 0.24));
+      const recover = Math.min(1, Math.max(0, (elapsedFall - 0.64) / 0.26));
+      const pose = elapsedFall < 0.24 ? down : (elapsedFall < 0.64 ? 1 : 1 - recover);
+      fallTilt = (this.player.facing > 0 ? -1 : 1) * pose * 1.16;
+    }
+
+    character.root.position.set(this.player.x, this.player.y + (isFallen ? 0.05 : 0), 0.12);
+    character.root.rotation.z = fallTilt;
+    character.root.scale.set(this.player.facing, isSliding ? 0.36 : (isFallen ? 0.9 : 1), 1);
+    character.leftLeg.rotation.z = isFallen ? 0.72 : gait;
+    character.rightLeg.rotation.z = isFallen ? -0.95 : -gait;
+    character.leftArm.rotation.z = isFallen ? -1.05 : -gait * 0.8;
+    character.rightArm.rotation.z = isFallen ? 1.0 : gait * 0.8;
+    character.torso.rotation.z = isFallen ? 0.2 : (isSliding ? -0.32 : (isMoving ? Math.sin(this.player.animationTime * 12.5) * 0.035 : 0));
     if (this.kickPoseRemaining > 0) {
       character.rightLeg.rotation.z = -0.98;
       character.leftArm.rotation.z = 0.38;
@@ -232,6 +287,21 @@ export class Game {
       if (!coin.visible) return;
       coin.rotation.y = Math.sin(time * 2.2 + index) * 0.24;
       coin.position.y = (this.coins[index]?.y ?? 0.65) + Math.sin(time * 2.4 + index * 0.8) * 0.08;
+    });
+    this.world.coinLossTokens.forEach((token) => {
+      if (!token.visible) return;
+      const life = Math.max(0, Number(token.userData['life'] ?? 0) - deltaSeconds);
+      token.userData['life'] = life;
+      token.position.x += Number(token.userData['velocityX'] ?? 0) * deltaSeconds;
+      token.position.y += Number(token.userData['velocityY'] ?? 0) * deltaSeconds;
+      token.userData['velocityY'] = Number(token.userData['velocityY'] ?? 0) - 9.2 * deltaSeconds;
+      token.rotation.y += deltaSeconds * 5.4;
+      token.rotation.z += deltaSeconds * 1.8;
+      token.scale.setScalar(Math.max(0.08, life / 0.78));
+      if (life <= 0) {
+        token.visible = false;
+        token.scale.setScalar(1);
+      }
     });
   }
 
@@ -248,7 +318,7 @@ export class Game {
 
     this.completed = true;
     this.ui.goalStatus.textContent = '1 / 1';
-    this.ui.finishSummary.textContent = `你收集了 ${this.coins.filter((coin) => coin.collected).length} 枚金幣，踢了 ${this.kickCount} 次球。放學路上的小冒險完成！`;
+    this.ui.finishSummary.textContent = `你最後保有 ${this.coinBalance} 枚金幣，踢了 ${this.kickCount} 次球。放學路上的小冒險完成！`;
     this.ui.finishCard.classList.remove('hidden');
     this.ui.bottomHint.classList.remove('visible');
     this.ui.shell.classList.remove('playing');

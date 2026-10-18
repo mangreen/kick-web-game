@@ -1,7 +1,7 @@
 # MEM: MVP Architecture — Kick Street
 
 Date: 2026-10-19
-Status: Approved for Phase 0 review
+Status: Approved for Phase 0 baseline; extended by [MEM-0002](./MEM-0002-obstacle-penalty-art-direction.md)
 Tags: [threejs, typescript, web-game, architecture]
 
 ## Summary
@@ -24,6 +24,7 @@ The request requires a pure web game with left/right movement, up to jump, down 
 - Architecture: [`../docs/architecture/overview.md`](../docs/architecture/overview.md)
 - Decision record: [`../docs/adr/ADR-0001-threejs-custom-physics.md`](../docs/adr/ADR-0001-threejs-custom-physics.md)
 - Backlog: [`../todo.md`](../todo.md)
+- Phase 1 extension: [`MEM-0002-obstacle-penalty-art-direction.md`](./MEM-0002-obstacle-penalty-art-direction.md)
 
 ## When to Use
 Use this decision for MVP game changes. Revisit if requirements add real multiplayer, online persistence, full rigid-body physics, or downloaded 3D assets.

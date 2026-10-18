@@ -2,6 +2,7 @@ import type {
   BallState,
   CoinCollectionResult,
   CoinState,
+  Direction,
   PlayerInput,
   PlayerState,
 } from './types';
@@ -13,6 +14,8 @@ const SLIDE_DURATION = 0.62;
 const SLIDE_SPEED = 10.2;
 const BALL_RADIUS = 0.34;
 const BALL_GRAVITY = 18;
+export const FALL_RECOVERY_SECONDS = 0.9;
+export const OBSTACLE_COIN_PENALTY = 3;
 
 export function createInitialPlayerState(): PlayerState {
   return {
@@ -23,6 +26,7 @@ export function createInitialPlayerState(): PlayerState {
     facing: 1,
     grounded: true,
     slideRemaining: 0,
+    fallRemaining: 0,
     kickCooldown: 0,
     animationTime: 0,
   };
@@ -34,6 +38,19 @@ export function createInitialBallState(): BallState {
 
 export function stepPlayer(state: PlayerState, input: PlayerInput, deltaSeconds: number): PlayerState {
   const dt = clampDelta(deltaSeconds);
+  if (state.fallRemaining > 0) {
+    return {
+      ...state,
+      vx: 0,
+      vy: 0,
+      grounded: true,
+      slideRemaining: 0,
+      fallRemaining: Math.max(0, state.fallRemaining - dt),
+      kickCooldown: Math.max(0, state.kickCooldown - dt),
+      animationTime: state.animationTime + dt,
+    };
+  }
+
   let facing = state.facing;
   const direction = Number(input.right) - Number(input.left);
 
@@ -83,9 +100,42 @@ export function stepPlayer(state: PlayerState, input: PlayerInput, deltaSeconds:
     facing,
     grounded,
     slideRemaining,
+    fallRemaining: 0,
     kickCooldown: Math.max(0, state.kickCooldown - dt),
     animationTime: state.animationTime + dt,
   };
+}
+
+export function getObstacleCollisionDirection(
+  previousX: number,
+  player: PlayerState,
+  obstacleX: number,
+  collisionRadius = 0.94,
+): Direction | null {
+  if (player.fallRemaining > 0 || player.slideRemaining > 0 || player.y > 1.18) return null;
+
+  const leftEdge = obstacleX - collisionRadius;
+  const rightEdge = obstacleX + collisionRadius;
+  if (previousX < leftEdge && player.x >= leftEdge) return 1;
+  if (previousX > rightEdge && player.x <= rightEdge) return -1;
+  return null;
+}
+
+export function startPlayerFall(state: PlayerState): PlayerState {
+  return {
+    ...state,
+    vx: 0,
+    vy: 0,
+    grounded: true,
+    slideRemaining: 0,
+    fallRemaining: FALL_RECOVERY_SECONDS,
+  };
+}
+
+export function deductCoins(balance: number, penalty = OBSTACLE_COIN_PENALTY): number {
+  const safeBalance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : 0;
+  const safePenalty = Number.isFinite(penalty) ? Math.max(0, Math.floor(penalty)) : 0;
+  return Math.max(0, safeBalance - safePenalty);
 }
 
 export function stepBall(state: BallState, deltaSeconds: number): BallState {
