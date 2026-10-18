@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#9bd8f1" />
+    <meta name="description" content="Kick Street — a tiny 3D browser soccer adventure." />
+    <title>Kick Street — 足球小冒險</title>
+  </head>
+  <body>
+    <main id="game-shell" aria-label="Kick Street 網頁遊戲">
+      <canvas id="game-canvas" aria-label="3D 足球遊戲畫面"></canvas>
+      <div class="topbar">
+        <a class="brand" href="#" aria-label="Kick Street 首頁"><span class="brand-mark">✦</span> KICK STREET</a>
+        <div class="hud" aria-live="polite">
+          <div class="hud-pill"><span class="hud-icon">◉</span><span id="coin-count">0</span><small>COINS</small></div>
+          <div class="hud-pill"><span class="hud-icon">⚽</span><span id="kick-count">0</span><small>KICKS</small></div>
+          <div class="hud-pill goal-pill"><span class="hud-icon">◎</span><span id="goal-status">0 / 1</span><small>GOAL</small></div>
+        </div>
+      </div>
+      <section class="intro-card" id="intro-card" aria-label="遊戲說明">
+        <p class="eyebrow">A LITTLE SOCCER ADVENTURE</p>
+        <h1>放學前，<br /><em>再踢一球！</em></h1>
+        <p class="intro-copy">穿過街道、收集金幣，把球送進遠方的球門。小心障礙物，享受每一次漂亮的踢球。</p>
+        <div class="key-guide">
+          <span class="key-chip"><b>←</b><b>→</b><small>移動</small></span>
+          <span class="key-chip"><b>↑</b><small>跳躍</small></span>
+          <span class="key-chip"><b>↓</b><small>滑鏟</small></span>
+          <span class="key-chip"><b>SPACE</b><small>踢球</small></span>
+        </div>
+        <button id="start-button" class="primary-button">開始冒險 <span>→</span></button>
+        <p class="tiny-note">建議使用桌面瀏覽器與鍵盤操作</p>
+      </section>
+      <section class="finish-card hidden" id="finish-card" aria-live="polite">
+        <p class="eyebrow">LEVEL COMPLETE</p>
+        <h2>漂亮的一球！</h2>
+        <p id="finish-summary">你成功把球踢進球門。</p>
+        <button id="restart-button" class="primary-button">再玩一次 <span>↻</span></button>
+      </section>
+      <div class="bottom-hint" id="bottom-hint"><span class="hint-dot"></span> 找到足球，按 <b>SPACE</b> 踢出漂亮弧線</div>
+      <div class="touch-controls" aria-label="觸控操作">
+        <div class="touch-cluster">
+          <button data-touch="left" aria-label="向左">←</button>
+          <button data-touch="right" aria-label="向右">→</button>
+        </div>
+        <div class="touch-cluster">
+          <button data-touch="slide" aria-label="滑鏟">↓</button>
+          <button data-touch="jump" aria-label="跳躍">↑</button>
+          <button data-touch="kick" aria-label="踢球">⚽</button>
+        </div>
+      </div>
+      <div class="screen-grain" aria-hidden="true"></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
