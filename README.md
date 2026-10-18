@@ -29,16 +29,19 @@ npm run coverage
 | `→` | 右移 | 向右跑動並改變角色朝向 |
 | `↑` | 跳躍 | 只在地面時起跳；不能連續二段跳 |
 | `↓` | 滑鏟 | 地面觸發短時間加速，可穿過低路障 |
-| `Space` | 踢球 | 靠近足球、面向足球時踢出帶有拋物線的球 |
+| 自動觸球 | 輕踢 | 人物在地面碰到慢速足球時，會朝角色面向自動輕踢，讓球保持向前滾動 |
+| `Space` | 強力踢球 | 靠近足球時施加高速度強力射門；球擊中路障會破壞第一個碰到的路障 |
 
-撞上路障會進入約 0.9 秒的跌倒恢復狀態，期間不能移動、跳躍或踢球；每次撞擊扣除最多 3 枚金幣，金幣不足時餘額歸零。撞擊會顯示金幣掉落效果與文字提示。跳躍越過或滑鏟通過路障可以避免懲罰。窄螢幕也提供觸控按鈕。
+人物撞上尚未破壞的路障會進入約 0.9 秒的跌倒恢復狀態，期間不能移動、跳躍或踢球；每次撞擊扣除最多 3 枚金幣，金幣不足時餘額歸零。球碰到路障時，輕踢只會讓球停在路障前；SPACE 強力踢球會破壞第一個撞上的路障，球繼續前進，但不會一次連鎖破壞後續路障。跳躍越過、滑鏟通過或先用強力球擊碎路障，都能避開人物碰撞懲罰。窄螢幕也提供觸控按鈕。
 
 ## MVP 範圍
 
 - [x] Three.js 場景、側向正交相機、城市建築、商店招牌、電線、路燈、樹木、斑馬線與磁磚人行道
 - [x] 原創動漫比例學生角色、書包、校服、跑步／踢球／跌倒姿勢、足球與金色代幣
 - [x] 左右移動、跳躍、重力、落地判定、滑鏟與跌倒恢復
-- [x] 足球地面摩擦、空中重力、彈跳與踢球冷卻
+- [x] 足球地面摩擦、空中重力、彈跳、自動輕踢與 SPACE 強力踢球
+- [x] 輕踢撞障礙時停球；強力踢球擊碎第一個命中的路障並讓球繼續前進
+- [x] 路障視覺分組，可在遊戲中破壞並於重新開始時復原
 - [x] 金幣收集、路障碰撞、最多 3 枚金幣懲罰、球門與完成畫面
 - [x] HUD、重新開始、鍵盤與觸控操作
 - [x] Domain 單元測試、架構圖、ADR、MEM、CHANGELOG 與 todo
@@ -54,12 +57,15 @@ flowchart TD
   Game --> Rules[Pure Domain Rules]
   Rules --> Player[Player Movement / Fall Recovery]
   Rules --> Wallet[Coin Penalty Rules]
-  Rules --> Ball[Ball Physics]
+  Rules --> Ball[Ball Physics / Kick Strength]
   Player --> Game
   Wallet --> Game
   Ball --> Game
-  Game --> Collision[Obstacle Crossing Adapter]
+  Game --> Kick[Automatic Touch / SPACE Power Kick]
+  Kick --> Rules
+  Game --> Collision[Player + Ball Obstacle Collision]
   Collision --> Rules
+  Collision --> Barrier[Hide Destroyed Barrier Mesh]
   Game --> Scene[Three.js 2.5D Urban Scene]
   Scene --> Renderer[WebGL Renderer]
   Game --> HUD[HUD / Fall Feedback]
@@ -75,7 +81,7 @@ Keyboard / Touch
  Game Controller -----------------------> DOM HUD / Coin Balance
        |                                      ^
        v                                      |
- Obstacle Crossing Adapter ------------> Domain Rules <------ Unit Tests
+ Player / Ball Collision Adapter ------> Domain Rules <------ Unit Tests
        |                                      |
        |                                      v
        +--------------------------------> Player / Ball State
@@ -88,7 +94,7 @@ Keyboard / Touch
 ```
 
 - `src/domain/`：純 TypeScript 遊戲規則，不依賴 DOM 或 Three.js，可快速單元測試。
-- `src/game/`：鍵盤／觸控輸入、遊戲迴圈、障礙物碰撞整合、金幣錢包及規則狀態到視覺物件的同步。
+- `src/game/`：鍵盤／觸控輸入、遊戲迴圈、自動輕踢／強力踢球、球與角色的障礙碰撞整合、金幣錢包及規則狀態到視覺物件的同步。
 - `src/main.ts`：DOM 組裝與錯誤提示。
 - `tests/`：使用 AAA（Arrange / Act / Assert）測試 Domain 行為。
 
@@ -106,7 +112,7 @@ Keyboard / Touch
 
 ## 工程規範對應
 
-- TDD：跌倒、金幣懲罰、路障穿越規則都有 Domain 單元測試；新增規則應先增測試，再修改 Domain。
+- TDD：跌倒、金幣懲罰、路障穿越、自動輕踢、強力踢球與障礙破壞規則都有 Domain 單元測試；新增規則應先增測試，再修改 Domain。
 - 覆蓋率：`npm run coverage` 對 `src/domain/**/*.ts` 設定 80% 門檻。
 - 安全：不需要 API keys、帳密、Token、後端 endpoints 或 `.env`；不要為此 MVP 添加秘密值。
 - 可觀測性：瀏覽器初始化錯誤會輸出到 console，並提供使用者可見提示；本專案沒有伺服器請求，因此不設 trace-id / request logging。
@@ -115,6 +121,6 @@ Keyboard / Touch
 
 ## 驗證狀態與已知限制
 
-本次環境使用 TypeScript 編譯器檢查 Domain，並以 Node.js assertion harness 執行 30 項 Domain 規則回歸檢查，皆通過；所有 TypeScript 檔案也通過語法轉譯檢查，應用程式搭配臨時 Three.js API 宣告的靜態型別檢查通過。由於本次環境無法完成 npm 相依套件安裝，正式 `npm test`、`npm run lint`、`npm run build` 與真實瀏覽器 WebGL 驗收尚未確認，請在可連線的開發環境執行上列命令。
+本次環境以 TypeScript 編譯器檢查 Domain，並使用臨時的 Vitest 相容測試執行器跑完整 38 個 Domain 測試案例，38 個通過；6 個 TypeScript 原始碼／測試檔也通過語法轉譯檢查。這不是官方 Vitest runner；應用程式也只使用臨時 Three.js API 宣告做過 strict type-check，尚未以實際 `three`／`@types/three` 套件驗證。由於此環境沒有已安裝的 npm 相依套件，正式 `npm test`、`npm run lint`、覆蓋率、`npm run build` 以及真實瀏覽器 WebGL 驗收仍未確認，請在可連線的開發環境執行上述命令。
 
 物理仍是為遊戲手感設計的簡化模型，並非完整剛體求解；目前是單段關卡，尚未加入音訊、持久化與瀏覽器端 E2E 測試。

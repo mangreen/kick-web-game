@@ -3,6 +3,7 @@ import type {
   CoinCollectionResult,
   CoinState,
   Direction,
+  KickStrength,
   PlayerInput,
   PlayerState,
 } from './types';
@@ -14,6 +15,12 @@ const SLIDE_DURATION = 0.62;
 const SLIDE_SPEED = 10.2;
 const BALL_RADIUS = 0.34;
 const BALL_GRAVITY = 18;
+export const LIGHT_KICK_SPEED = 5.8;
+export const POWER_KICK_SPEED = 24.5;
+export const POWER_KICK_LIFT = 3.6;
+export const PLAYER_BALL_TOUCH_RADIUS = 0.78;
+export const BALL_OBSTACLE_COLLISION_RADIUS = 0.93;
+export const BALL_OBSTACLE_MAX_HEIGHT = 1.4;
 export const FALL_RECOVERY_SECONDS = 0.9;
 export const OBSTACLE_COIN_PENALTY = 3;
 
@@ -34,6 +41,79 @@ export function createInitialPlayerState(): PlayerState {
 
 export function createInitialBallState(): BallState {
   return { x: 1.2, y: BALL_RADIUS, vx: 0, vy: 0, grounded: true };
+}
+
+export function isPlayerTouchingBall(
+  player: PlayerState,
+  ball: BallState,
+  touchRadius = PLAYER_BALL_TOUCH_RADIUS,
+): boolean {
+  return player.fallRemaining <= 0
+    && player.grounded
+    && player.y <= 0.25
+    && ball.y <= 0.9
+    && Math.abs(player.x - ball.x) <= touchRadius;
+}
+
+export function kickBall(ball: BallState, direction: Direction, strength: KickStrength): BallState {
+  if (strength === 'light') {
+    return {
+      ...ball,
+      vx: direction * LIGHT_KICK_SPEED,
+      vy: 0,
+      grounded: true,
+      y: BALL_RADIUS,
+    };
+  }
+
+  return {
+    ...ball,
+    vx: direction * POWER_KICK_SPEED,
+    vy: POWER_KICK_LIFT,
+    grounded: false,
+  };
+}
+
+export function getBallObstacleCollisionDirection(
+  previousX: number,
+  ball: BallState,
+  obstacleX: number,
+  collisionRadius = BALL_OBSTACLE_COLLISION_RADIUS,
+): Direction | null {
+  if (ball.y > BALL_OBSTACLE_MAX_HEIGHT) return null;
+
+  const leftEdge = obstacleX - collisionRadius;
+  const rightEdge = obstacleX + collisionRadius;
+  if (previousX < leftEdge && ball.x >= leftEdge) return 1;
+  if (previousX > rightEdge && ball.x <= rightEdge) return -1;
+  return null;
+}
+
+export function resolveBallObstacleImpact(
+  ball: BallState,
+  obstacleX: number,
+  collisionDirection: Direction,
+  strength: KickStrength,
+  collisionRadius = BALL_OBSTACLE_COLLISION_RADIUS,
+): { ball: BallState; obstacleDestroyed: boolean } {
+  if (strength === 'power') {
+    return {
+      ball: { ...ball, vx: ball.vx * 0.88 },
+      obstacleDestroyed: true,
+    };
+  }
+
+  return {
+    ball: {
+      ...ball,
+      x: obstacleX - collisionDirection * collisionRadius,
+      y: BALL_RADIUS,
+      vx: 0,
+      vy: 0,
+      grounded: true,
+    },
+    obstacleDestroyed: false,
+  };
 }
 
 export function stepPlayer(state: PlayerState, input: PlayerInput, deltaSeconds: number): PlayerState {

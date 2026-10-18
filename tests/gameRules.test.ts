@@ -4,8 +4,12 @@ import {
   createInitialBallState,
   createInitialPlayerState,
   deductCoins,
+  getBallObstacleCollisionDirection,
   getObstacleCollisionDirection,
   hasScored,
+  isPlayerTouchingBall,
+  kickBall,
+  resolveBallObstacleImpact,
   startPlayerFall,
   stepBall,
   stepPlayer,
@@ -233,5 +237,75 @@ describe('coin and goal rules', () => {
     const result = collectNearbyCoins(0, 0, coin);
     expect(result.collectedCount).toBe(1);
     expect(result.coins[0]?.collected).toBe(true);
+  });
+});
+
+describe('automatic light kick and power kick rules', () => {
+  it('should_light_kick_the_ball_forward_at_a_low_speed', () => {
+    const initialBall = createInitialBallState();
+    const kicked = kickBall(initialBall, 1, 'light');
+
+    expect(kicked.vx).toBeGreaterThan(0);
+    expect(kicked.vx).toBeLessThan(8);
+    expect(kicked.vy).toBe(0);
+    expect(kicked.grounded).toBe(true);
+  });
+
+  it('should_apply_a_stronger_forward_velocity_for_a_power_kick', () => {
+    const initialBall = createInitialBallState();
+    const lightKick = kickBall(initialBall, 1, 'light');
+    const powerKick = kickBall(initialBall, 1, 'power');
+
+    expect(powerKick.vx).toBeGreaterThan(lightKick.vx * 3);
+    expect(powerKick.vy).toBeGreaterThan(0);
+    expect(powerKick.grounded).toBe(false);
+  });
+
+  it('should_respect_the_kickers_facing_direction_for_a_power_kick', () => {
+    const kicked = kickBall(createInitialBallState(), -1, 'power');
+    expect(kicked.vx).toBeLessThan(0);
+  });
+
+  it('should_detect_player_ball_contact_only_when_the_player_is_grounded_and_nearby', () => {
+    const player = { ...createInitialPlayerState(), x: 0.5 };
+    const ball = createInitialBallState();
+
+    expect(isPlayerTouchingBall(player, ball)).toBe(true);
+    expect(isPlayerTouchingBall({ ...player, x: -1 }, ball)).toBe(false);
+    expect(isPlayerTouchingBall({ ...player, y: 1, grounded: false }, ball)).toBe(false);
+    expect(isPlayerTouchingBall({ ...player, fallRemaining: 0.2 }, ball)).toBe(false);
+  });
+});
+
+describe('ball and obstacle impact rules', () => {
+  it('should_detect_a_ball_sweeping_into_an_obstacle_from_either_direction', () => {
+    const lowBall = { ...createInitialBallState(), x: 8.2, y: 0.34 };
+    expect(getBallObstacleCollisionDirection(7.2, lowBall, 8.4)).toBe(1);
+    expect(getBallObstacleCollisionDirection(9.6, { ...lowBall, x: 8.8 }, 8.4)).toBe(-1);
+  });
+
+  it('should_ignore_ball_paths_that_do_not_intersect_an_obstacle_or_are_too_high', () => {
+    expect(getBallObstacleCollisionDirection(7, { ...createInitialBallState(), x: 7.2 }, 8.4)).toBeNull();
+    expect(getBallObstacleCollisionDirection(7.2, { ...createInitialBallState(), x: 8.2, y: 1.8 }, 8.4)).toBeNull();
+  });
+
+  it('should_stop_a_light_kicked_ball_at_the_barrier_without_destroying_it', () => {
+    const ball = { ...createInitialBallState(), x: 8.2, vx: 5.5 };
+    const impact = resolveBallObstacleImpact(ball, 8.4, 1, 'light');
+
+    expect(impact.obstacleDestroyed).toBe(false);
+    expect(impact.ball.x).toBeLessThan(8.4);
+    expect(impact.ball.vx).toBe(0);
+    expect(impact.ball.vy).toBe(0);
+    expect(impact.ball.grounded).toBe(true);
+  });
+
+  it('should_allow_a_power_kick_to_destroy_the_barrier_and_continue_forward', () => {
+    const ball = { ...createInitialBallState(), x: 8.2, vx: 24, vy: 0.8, grounded: false };
+    const impact = resolveBallObstacleImpact(ball, 8.4, 1, 'power');
+
+    expect(impact.obstacleDestroyed).toBe(true);
+    expect(impact.ball.vx).toBeGreaterThan(0);
+    expect(impact.ball.x).toBe(ball.x);
   });
 });

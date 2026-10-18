@@ -15,6 +15,7 @@ export interface WorldAssets {
   coinMeshes: THREE.Group[];
   coinLossTokens: THREE.Group[];
   obstacles: number[];
+  obstacleMeshes: THREE.Group[];
   goalX: number;
   ball: THREE.Group;
   character: CharacterRig;
@@ -81,9 +82,9 @@ export function createWorld(scene: THREE.Scene): WorldAssets {
   });
 
   const obstacles = [8.4, 16.4, 24.8, 33.2, 40.2];
-  obstacles.forEach((x, index) => createRoadBarrier(scene, x, index));
+  const obstacleMeshes = obstacles.map((x, index) => createRoadBarrier(scene, x, index));
 
-  return { coins, coinMeshes, coinLossTokens, obstacles, goalX, ball, character };
+  return { coins, coinMeshes, coinLossTokens, obstacles, obstacleMeshes, goalX, ball, character };
 }
 
 export function createCharacter(scene: THREE.Scene): CharacterRig {
@@ -336,7 +337,10 @@ function createGoal(scene: THREE.Scene, x: number): void {
   scene.add(sign);
 }
 
-function createRoadBarrier(scene: THREE.Scene, x: number, index: number): void {
+function createRoadBarrier(scene: THREE.Scene, x: number, index: number): THREE.Group {
+  const barrier = new THREE.Group();
+  barrier.name = `road-barrier-${index}`;
+  scene.add(barrier);
   const orange = mat(index % 2 === 0 ? '#f16b42' : '#f28f42', 0.62);
   const white = mat('#fff0d9', 0.58);
   const footMaterial = mat('#3d414b', 0.78);
@@ -345,28 +349,29 @@ function createRoadBarrier(scene: THREE.Scene, x: number, index: number): void {
     const foot = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.09, 0.38), footMaterial);
     foot.position.set(x + offsetX, 0.08, 0.23);
     foot.castShadow = true;
-    scene.add(foot);
+    barrier.add(foot);
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.78, 0.2), orange);
     leg.position.set(x + offsetX, 0.45, 0.21);
     leg.castShadow = true;
-    scene.add(leg);
+    barrier.add(leg);
   }
 
   const beam = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.25, 0.28), orange);
   beam.position.set(x, 0.86, 0.23);
   beam.castShadow = true;
   beam.receiveShadow = true;
-  scene.add(beam);
+  barrier.add(beam);
   for (let stripeIndex = -2; stripeIndex <= 2; stripeIndex += 1) {
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.295), white);
     stripe.position.set(x + stripeIndex * 0.22, 0.86, 0.24);
     stripe.rotation.z = -0.45;
     stripe.castShadow = true;
-    scene.add(stripe);
+    barrier.add(stripe);
   }
   const warning = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.025), mat('#b63a33'));
   warning.position.set(x, 0.85, 0.39);
-  scene.add(warning);
+  barrier.add(warning);
+  return barrier;
 }
 
 function createGroundLayers(scene: THREE.Scene): void {

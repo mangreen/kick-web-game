@@ -5,14 +5,18 @@ import {
   createInitialPlayerState,
   deductCoins,
   FALL_RECOVERY_SECONDS,
+  getBallObstacleCollisionDirection,
   getObstacleCollisionDirection,
   hasScored,
+  isPlayerTouchingBall,
+  kickBall,
   OBSTACLE_COIN_PENALTY,
+  resolveBallObstacleImpact,
   startPlayerFall,
   stepBall,
   stepPlayer,
 } from '../domain/gameRules';
-import type { BallState, CoinState, PlayerInput, PlayerState } from '../domain/types';
+import type { BallState, CoinState, KickStrength, PlayerInput, PlayerState } from '../domain/types';
 import { createWorld } from './SceneFactory';
 
 export interface GameUI {
@@ -29,7 +33,7 @@ export interface GameUI {
 }
 
 const GOAL_SCORE_HEIGHT = 2.12;
-const DEFAULT_HINT = '找到足球，按 SPACE 踢出漂亮弧線';
+const DEFAULT_HINT = '碰到足球會自動輕踢；按 SPACE 強力射門並擊碎路障';
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -51,6 +55,8 @@ export class Game {
   private readonly touchKeys = new Set<string>();
   private animationFrame = 0;
   private readonly obstacles: number[];
+  private readonly obstacleMeshes: THREE.Group[];
+  private ballKickStrength: KickStrength | null = null;
   private readonly ui: GameUI;
 
   constructor(canvas: HTMLCanvasElement, ui: GameUI) {
@@ -65,6 +71,7 @@ export class Game {
 
     this.world = createWorld(this.scene);
     this.obstacles = this.world.obstacles;
+    this.obstacleMeshes = this.world.obstacleMeshes;
     this.coins = this.world.coins.map((coin) => ({ ...coin }));
     this.player = createInitialPlayerState();
     this.ball = createInitialBallState();
@@ -92,6 +99,8 @@ export class Game {
     this.started = true;
     this.completed = false;
     this.kickPoseRemaining = 0;
+    this.ballKickStrength = null;
+    this.obstacleMeshes.forEach((obstacle) => { obstacle.visible = true; });
     this.ui.coinCount.textContent = '0';
     this.ui.coinCount.classList.remove('coin-loss');
     this.ui.kickCount.textContent = '0';
@@ -140,7 +149,12 @@ export class Game {
 
     const previousBallX = this.ball.x;
     this.ball = stepBall(this.ball, deltaSeconds);
-    if (this.justPressed.has('Space')) this.tryKick();
+    this.applyBallObstacleCollisions(previousBallX);
+    if (this.justPressed.has('Space')) {
+      this.tryKick();
+    } else {
+      this.tryAutomaticLightKick();
+    }
     this.justPressed.clear();
 
     if (this.player.fallRemaining <= 0) {
@@ -177,33 +191,68 @@ export class Game {
   }
 
   private tryKick(): void {
-    if (this.player.fallRemaining > 0 || this.player.kickCooldown > 0) return;
+    if (this.player.fallRemaining > 0) return;
     const directionToBall = (this.ball.x - this.player.x) * this.player.facing;
     const nearEnough = directionToBall >= -0.35 && directionToBall <= 1.9;
     const heightOkay = this.ball.y < 1.55 && this.player.y < 1.15;
 
-    this.kickPoseRemaining = 0.28;
     if (!nearEnough || !heightOkay) {
-      this.flashHint('再靠近足球一點，按 SPACE 踢球');
+      this.flashHint('再靠近足球一點，SPACE 才能強力射門');
       return;
     }
 
-    this.ball = {
-      ...this.ball,
-      vx: this.player.facing * (17.5 + Math.max(0, this.player.vx) * 0.22),
-      vy: 4.15,
-      grounded: false,
-    };
-    this.player = { ...this.player, kickCooldown: 0.28 };
+    this.ball = kickBall(this.ball, this.player.facing, 'power');
+    this.ballKickStrength = 'power';
+    this.player = { ...this.player, kickCooldown: 0.42 };
+    this.kickPoseRemaining = 0.32;
     this.kickCount += 1;
     this.ui.kickCount.textContent = String(this.kickCount);
-    this.flashHint(this.kickCount % 3 === 0 ? '連續踢球！漂亮！' : '漂亮的傳球！繼續追上去');
+    this.flashHint('強力射門！擊中路障就能把它擊碎！');
+  }
+
+  private tryAutomaticLightKick(): void {
+    if (this.player.fallRemaining > 0 || this.player.kickCooldown > 0 || Math.abs(this.ball.vx) > 0.85) return;
+    if (!isPlayerTouchingBall(this.player, this.ball)) return;
+
+    this.ball = kickBall(this.ball, this.player.facing, 'light');
+    this.ballKickStrength = 'light';
+    this.player = { ...this.player, kickCooldown: 0.42 };
+    this.kickPoseRemaining = 0.16;
+    this.kickCount += 1;
+    this.ui.kickCount.textContent = String(this.kickCount);
+    this.flashHint('碰到足球！自動輕踢，按 SPACE 可強力射門');
+  }
+
+  private applyBallObstacleCollisions(previousBallX: number): void {
+    for (let index = 0; index < this.obstacles.length; index += 1) {
+      const obstacleX = this.obstacles[index];
+      const obstacleMesh = this.obstacleMeshes[index];
+      if (obstacleX === undefined || !obstacleMesh?.visible) continue;
+
+      const collisionDirection = getBallObstacleCollisionDirection(previousBallX, this.ball, obstacleX);
+      if (collisionDirection === null) continue;
+
+      const strength = this.ballKickStrength ?? 'light';
+      const impact = resolveBallObstacleImpact(this.ball, obstacleX, collisionDirection, strength);
+      this.ball = impact.ball;
+      this.ballKickStrength = null;
+
+      if (impact.obstacleDestroyed) {
+        obstacleMesh.visible = false;
+        this.flashHint('POWER SHOT！路障被擊碎了！繼續前進！');
+      } else {
+        this.flashHint('輕踢的球被路障擋住了；按 SPACE 強力射門來破壞它！');
+      }
+      return;
+    }
   }
 
   private applyObstacleCollisions(previousX: number): void {
     if (this.player.fallRemaining > 0) return;
 
-    for (const obstacleX of this.obstacles) {
+    for (let index = 0; index < this.obstacles.length; index += 1) {
+      const obstacleX = this.obstacles[index];
+      if (obstacleX === undefined || !this.obstacleMeshes[index]?.visible) continue;
       const collisionDirection = getObstacleCollisionDirection(previousX, this.player, obstacleX);
       if (collisionDirection === null) continue;
 

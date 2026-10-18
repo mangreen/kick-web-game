@@ -1,4 +1,5 @@
 export type Direction = -1 | 1;
+export type KickStrength = 'light' | 'power';
 
 export interface PlayerState {
   x: number;
