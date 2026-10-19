@@ -307,5 +307,70 @@ describe('ball and obstacle impact rules', () => {
     expect(impact.obstacleDestroyed).toBe(true);
     expect(impact.ball.vx).toBeGreaterThan(0);
     expect(impact.ball.x).toBe(ball.x);
+    expect(impact.nextKickStrength).toBe('power');
+  });
+
+  it('should_allow_a_power_shot_to_destroy_every_configured_barrier', () => {
+    const obstaclePositions = [8.4, 16.4, 24.8, 33.2, 40.2];
+    let kickStrength: 'light' | 'power' | null = 'power';
+
+    for (const obstacleX of obstaclePositions) {
+      // Model a swept ball impact at each configured barrier, independent of scene index.
+      const previousX = obstacleX - 1.5;
+      const ball = {
+        ...createInitialBallState(),
+        x: obstacleX - 0.5,
+        y: 0.5,
+        vx: 24,
+        vy: 0,
+        grounded: false,
+      };
+      const direction = getBallObstacleCollisionDirection(previousX, ball, obstacleX);
+      expect(direction).not.toBeNull();
+
+      const impact = resolveBallObstacleImpact(ball, obstacleX, direction ?? 1, kickStrength ?? 'light');
+      expect(impact.obstacleDestroyed).toBe(true);
+      kickStrength = impact.nextKickStrength;
+    }
+
+    expect(kickStrength).toBe('power');
+  });
+
+  it('should_keep_a_power_shot_active_when_the_same_ball_hits_the_next_barrier', () => {
+    const obstaclePositions = [8.4, 16.4, 24.8, 33.2, 40.2];
+    let ball = kickBall(createInitialBallState(), 1, 'power');
+    let kickStrength: 'light' | 'power' | null = 'power';
+    const destroyed: number[] = [];
+
+    // Exercise real ball physics and swept collision detection through the first reachable barriers.
+    for (let frame = 0; frame < 1800 && ball.x < 44; frame += 1) {
+      const previousX = ball.x;
+      ball = stepBall(ball, 1 / 60);
+
+      for (const obstacleX of obstaclePositions) {
+        if (destroyed.includes(obstacleX)) continue;
+        const direction = getBallObstacleCollisionDirection(previousX, ball, obstacleX);
+        if (direction === null) continue;
+
+        const impact = resolveBallObstacleImpact(ball, obstacleX, direction, kickStrength ?? 'light');
+        ball = impact.ball;
+        kickStrength = impact.nextKickStrength;
+        if (impact.obstacleDestroyed) destroyed.push(obstacleX);
+        break;
+      }
+    }
+
+    expect(destroyed.includes(8.4)).toBe(true);
+    expect(destroyed.includes(16.4)).toBe(true);
+    expect(kickStrength).toBe('power');
+  });
+
+  it('should_consume_a_light_kick_when_it_is_blocked_by_a_barrier', () => {
+    const ball = { ...createInitialBallState(), x: 8.2, vx: 5.5 };
+    const impact = resolveBallObstacleImpact(ball, 8.4, 1, 'light');
+
+    expect(impact.obstacleDestroyed).toBe(false);
+    expect(impact.nextKickStrength).toBeNull();
+    expect(impact.ball.vx).toBe(0);
   });
 });

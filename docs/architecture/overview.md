@@ -34,7 +34,7 @@ flowchart TD
 1. `Game` reads held and just-pressed input each animation frame.
 2. `stepPlayer` and `stepBall` integrate deterministic state using delta time clamped to 50 ms.
 3. When a grounded player touches a slow-moving ball and the kick cooldown has expired, the controller applies a forward light kick. SPACE applies a distinct power kick when the ball is within reach.
-4. The ball-obstacle adapter detects a swept collision so a fast ball cannot tunnel through a barrier between frames. Light kicks stop at the barrier; a power kick destroys exactly the first barrier it hits and then consumes its one-impact power state.
+4. The ball-obstacle adapter detects a swept collision so a fast ball cannot tunnel through a barrier between frames. Light kicks stop at the barrier; a power kick destroys each barrier it hits; the destructive state remains active across barrier impacts, while a light-kicked ball is stopped by an intact barrier.
 5. The player collision adapter detects an obstacle crossing unless the player is sliding beneath or jumping above it. A collision starts a timed fall state and applies one coin penalty.
 6. While `fallRemaining > 0`, player input is ignored and the player remains grounded; the view animates a stumble/tilt. Recovery allows control again.
 7. `coinBalance` is the spendable HUD balance. Collecting a coin increases it by one; hitting an obstacle subtracts up to three coins, clamped at zero. Collectable-world state remains separate so collected coins do not reappear until restart.

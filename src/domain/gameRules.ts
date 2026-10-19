@@ -95,11 +95,13 @@ export function resolveBallObstacleImpact(
   collisionDirection: Direction,
   strength: KickStrength,
   collisionRadius = BALL_OBSTACLE_COLLISION_RADIUS,
-): { ball: BallState; obstacleDestroyed: boolean } {
+): { ball: BallState; obstacleDestroyed: boolean; nextKickStrength: KickStrength | null } {
   if (strength === 'power') {
     return {
       ball: { ...ball, vx: ball.vx * 0.88 },
       obstacleDestroyed: true,
+      // A power shot keeps its destructive force after breaking a barrier.
+      nextKickStrength: 'power',
     };
   }
 
@@ -113,6 +115,7 @@ export function resolveBallObstacleImpact(
       grounded: true,
     },
     obstacleDestroyed: false,
+    nextKickStrength: null,
   };
 }
 

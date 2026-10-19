@@ -5,7 +5,7 @@
 - [x] Add failing tests first for automatic light kick, power kick, swept collision, and impact outcomes.
 - [x] Auto-light-kick when a grounded player contacts a slow-moving ball; use cooldown to prevent repeated frame impulses.
 - [x] Make SPACE apply a much stronger kick that bypasses the automatic-kick cooldown.
-- [x] Stop light-kicked balls at barriers; power shots destroy only the first barrier hit and continue forward.
+- [x] Stop light-kicked balls at barriers; preserve the power-shot state after breaking a barrier so subsequent impacts from that shot can also break barriers.
 - [x] Group barrier meshes so the scene can hide destroyed obstacles and restore them on restart.
 - [x] Update controls, README, architecture, ADR, MEM, CHANGELOG and daily report.
 - [x] Add Conventional Commit and Phase Tag for Phase 2.
@@ -22,7 +22,7 @@
 
 ## Validation
 - [x] Type-check the dependency-free Domain module with the installed TypeScript compiler.
-- [x] Run all 38 Domain test cases with a temporary Vitest-compatible harness (38 passed; not the official Vitest runner).
+- [x] Run all 41 Domain test cases with a temporary Vitest-compatible harness (41 passed; not the official Vitest runner).
 - [x] Parse all TypeScript source/test files with TypeScript `transpileModule` (no syntax diagnostics).
 - [x] Strict-check updated application source against a temporary Three.js API stub (no source diagnostics; this is not a substitute for upstream typings).
 - [ ] Type-check updated application source against the real Three.js package typings.
@@ -34,3 +34,10 @@
 ## Deferred
 - [ ] Audio, fully rigged animation, multiple levels, and gamepad support.
 - [ ] Browser E2E / screenshot regression.
+
+
+## Bug fix — power shot barrier destruction (2026-10-19)
+- [x] Preserve power-shot state after a barrier is destroyed.
+- [x] Add regression tests for all five obstacle positions, a continuous shot hitting successive barriers, and light-kick blocking.
+- [ ] Run the official Vitest suite, lint and production build in an environment with project dependencies installed.
+- [ ] Verify the behavior in a real browser after applying the patch to the GitHub working tree.

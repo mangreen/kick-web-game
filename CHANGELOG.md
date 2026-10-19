@@ -2,12 +2,18 @@
 
 Notable changes to this project are documented here.
 
+## [0.3.1] - 2026-10-19
+
+### Fixed
+- A power shot retains its destructive state after a barrier impact, so subsequent barriers hit by the same shot can also be destroyed.
+- Added regression coverage for all five configured obstacle positions and for consuming a blocked light kick.
+
 ## [0.3.0] - 2026-10-19
 
 ### Added
 - Touching a slow-moving ball while grounded automatically applies a forward light kick with a cooldown.
 - SPACE now performs a distinct, faster power kick when the ball is within reach.
-- Light-kicked balls stop at intact barriers; a power-kicked ball destroys the first barrier it hits and keeps moving.
+- Light-kicked balls stop at intact barriers; a power-kicked ball destroys each barrier it hits while the power-shot state remains active.
 - Barrier meshes are grouped so they can be hidden on destruction and restored on restart.
 - Domain regression tests for kick speeds, player-ball contact, swept ball collision, and light/power impact outcomes.
 - Updated HUD hints and control instructions to explain automatic light kicks and SPACE power shots.

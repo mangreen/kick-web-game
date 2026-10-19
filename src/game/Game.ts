@@ -235,7 +235,7 @@ export class Game {
       const strength = this.ballKickStrength ?? 'light';
       const impact = resolveBallObstacleImpact(this.ball, obstacleX, collisionDirection, strength);
       this.ball = impact.ball;
-      this.ballKickStrength = null;
+      this.ballKickStrength = impact.nextKickStrength;
 
       if (impact.obstacleDestroyed) {
         obstacleMesh.visible = false;
